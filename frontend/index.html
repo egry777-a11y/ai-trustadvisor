@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI TrustAdvisor</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-900 text-gray-100 flex items-center justify-center h-screen">
+  <div id="root" class="w-full max-w-lg p-4"></div>
+  <script type="text/babel">
+    const App = () => {
+      const [url, setUrl] = React.useState('');
+      const [result, setResult] = React.useState(null);
+
+      const handleScan = async () => {
+        const res = await fetch('/api/scan', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+        setResult(data);
+      };
+
+      return (
+        <div className="bg-gray-800 p-6 rounded-xl shadow-lg w-full">
+          <h1 className="text-2xl font-bold mb-4 text-center">AI TrustAdvisor</h1>
+          <input className="w-full p-2 mb-3 rounded text-black" placeholder="Enter website URL..." value={url} onChange={e=>setUrl(e.target.value)} />
+          <button onClick={handleScan} className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded">Scan Website</button>
+          {result && (
+            <div className="mt-4 p-3 bg-gray-700 rounded">
+              <p><b>Website:</b> {result.url}</p>
+              <p><b>Trusted:</b> {result.trusted ? "✅ Yes" : "❌ No"}</p>
+              <p><b>Payment Safe:</b> {result.payment_safe ? "✅ Yes" : "❌ No"}</p>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>

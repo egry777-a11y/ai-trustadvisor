@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  web:
+    build: .
+    ports:
+      - '4000:4000'
+    environment:
+      - PORT=4000
+      # Optionally set these to enable richer integrations:
+      # - GOOGLE_SAFEBROWSING_KEY=your_key
+      # - VIRUSTOTAL_KEY=your_key
+      # - WHOISXMLAPI_KEY=your_key
+      # - OPENAI_API_KEY=your_key
+    restart: unless-stopped

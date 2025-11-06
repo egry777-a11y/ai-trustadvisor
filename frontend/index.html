@@ -1,48 +1,167 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>AI TrustAdvisor</title>
+  <!-- Tailwind Play CDN for quick styling (not for production). -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React + ReactDOM + Babel for in-browser JSX transform (dev/demo only) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
-<body class="bg-gray-900 text-gray-100 flex items-center justify-center h-screen">
-  <div id="root" class="w-full max-w-lg p-4"></div>
+<body class="bg-gradient-to-b from-gray-50 to-white min-h-screen">
+  <div id="root" class="p-6 max-w-5xl mx-auto"></div>
+
   <script type="text/babel">
-    const App = () => {
-      const [url, setUrl] = React.useState('');
-      const [result, setResult] = React.useState(null);
+  const { useState } = React;
 
-      const handleScan = async () => {
-        const res = await fetch('/api/scan', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ url })
-        });
-        const data = await res.json();
-        setResult(data);
-      };
+  function TrustAdvisor() {
+    const [url, setUrl] = useState('');
+    const [mockMode, setMockMode] = useState(true);
+    const [method, setMethod] = useState('AUTO');
+    const [scan, setScan] = useState(null);
+    const [ai, setAi] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
 
-      return (
-        <div className="bg-gray-800 p-6 rounded-xl shadow-lg w-full">
-          <h1 className="text-2xl font-bold mb-4 text-center">AI TrustAdvisor</h1>
-          <input className="w-full p-2 mb-3 rounded text-black" placeholder="Enter website URL..." value={url} onChange={e=>setUrl(e.target.value)} />
-          <button onClick={handleScan} className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded">Scan Website</button>
-          {result && (
-            <div className="mt-4 p-3 bg-gray-700 rounded">
-              <p><b>Website:</b> {result.url}</p>
-              <p><b>Trusted:</b> {result.trusted ? "✅ Yes" : "❌ No"}</p>
-              <p><b>Payment Safe:</b> {result.payment_safe ? "✅ Yes" : "❌ No"}</p>
-            </div>
-          )}
+    function normalize(u) {
+      if (!u) return null;
+      try {
+        if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+        return new URL(u).href;
+      } catch (e) { return null; }
+    }
+
+    async function doScan(href) {
+      if (mockMode) {
+        const r = await fetch('/api/scan?url=' + encodeURIComponent(href));
+        return r.json();
+      }
+      const postBody = JSON.stringify({ url: href });
+      if (method === 'POST') {
+        const r = await fetch('/api/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: postBody });
+        return r.json();
+      }
+      if (method === 'GET') {
+        const r = await fetch('/api/scan?url=' + encodeURIComponent(href));
+        return r.json();
+      }
+      // AUTO
+      let r = await fetch('/api/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: postBody });
+      if (r.status === 405) r = await fetch('/api/scan?url=' + encodeURIComponent(href));
+      return r.json();
+    }
+
+    async function askAi(scanData) {
+      const r = await fetch('/api/ai-assess', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scan: scanData }) });
+      return r.json();
+    }
+
+    async function handleScan(e) {
+      e && e.preventDefault();
+      setError(null); setScan(null); setAi(null);
+      const href = normalize(url);
+      if (!href) { setError('Invalid URL'); return; }
+      setLoading(true);
+      try {
+        const s = await doScan(href);
+        setScan(s);
+        try {
+          const a = await askAi(s);
+          setAi(a);
+        } catch (ae) {
+          setAi({ summary: 'AI unavailable', advice: '', confidence: 0 });
+        }
+      } catch (err) {
+        setError(String(err));
+      } finally { setLoading(false); }
+    }
+
+    return (<div className="bg-white rounded-2xl p-6 shadow">
+      <h1 className="text-2xl font-bold">AI TrustAdvisor</h1>
+      <p className="text-sm text-gray-600">AI-assisted site & payment trust checks. Use Mock mode for demo.</p>
+
+      <form onSubmit={handleScan} className="grid grid-cols-1 md:grid-cols-6 gap-3 mt-4">
+        <div className="md:col-span-4">
+          <label className="text-sm text-gray-700">Website URL</label>
+          <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://example.com" className="mt-1 block w-full rounded border-gray-200 p-3" />
         </div>
-      );
-    };
+        <div className="md:col-span-2 flex flex-col gap-2">
+          <div className="flex gap-2">
+            <button className="flex-1 bg-indigo-600 text-white rounded px-4 py-2">{loading? 'Scanning...':'Scan with AI'}</button>
+            <button type="button" onClick={()=>{ setUrl(''); setScan(null); setAi(null); setError(null); }} className="px-4 py-2 border rounded">Clear</button>
+          </div>
+          <div className="flex items-center gap-2">
+            <select value={method} onChange={e=>setMethod(e.target.value)} className="rounded border p-2">
+              <option value="AUTO">AUTO (POST→GET on 405)</option>
+              <option value="POST">POST only</option>
+              <option value="GET">GET only</option>
+            </select>
+            <label className="flex items-center text-sm"><input type="checkbox" checked={mockMode} onChange={e=>setMockMode(e.target.checked)} className="mr-2" /> Mock</label>
+          </div>
+        </div>
+      </form>
 
-    ReactDOM.render(<App />, document.getElementById('root'));
+      <div className="mt-3 flex gap-2">
+        <button onClick={()=>setUrl('https://example.com')} className="text-xs px-2 py-1 border rounded">Good site</button>
+        <button onClick={()=>setUrl('https://phishy.example')} className="text-xs px-2 py-1 border rounded">Phishy</button>
+        <button onClick={async ()=>{ setUrl('https://mocksite.local'); setMockMode(true); await new Promise(r=>setTimeout(r,50)); handleScan(); }} className="text-xs px-2 py-1 border rounded">Run mock</button>
+      </div>
+
+      {error && <div className="mt-4 p-3 bg-red-50 text-red-700 rounded">{error}</div>}
+
+      {scan && <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="md:col-span-2 bg-gray-50 p-4 rounded">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm text-gray-500">Domain</div>
+              <div className="text-xl font-semibold">{scan.domain}</div>
+              <div className="text-xs text-gray-400">Scanned at {scan.scanned_at}</div>
+            </div>
+            <div className="text-sm font-semibold">{Math.round((scan.composite_score||0)*100)}%</div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+            {Object.entries(scan.results||{}).map(([k,v])=>(
+              <div key={k} className="p-3 bg-white rounded border">
+                <div className="text-xs text-gray-500 uppercase">{k}</div>
+                <div className="font-bold">{v.provider||v.issuer||k}</div>
+                <div className="text-xs text-gray-600 mt-2">{v.details||v.recommendation||JSON.stringify(v).slice(0,80)}</div>
+                <div className="text-xs text-gray-400 mt-2">Score: {Math.round((v.score||0)*100)}%</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4">
+            <h3 className="font-semibold">Evidence & Heuristics</h3>
+            <pre className="mt-2 text-xs bg-white p-3 rounded border overflow-auto">{JSON.stringify(scan.results?.heuristics||{},null,2)}</pre>
+          </div>
+        </div>
+
+        <aside className="bg-white p-4 rounded border">
+          <h3 className="font-semibold">AI Explanation</h3>
+          <div className="mt-2 text-sm text-gray-700">
+            {ai ? <>
+              <div className="font-medium">Summary</div>
+              <div className="mt-1">{ai.summary}</div>
+              <div className="font-medium mt-3">Advice</div>
+              <div className="mt-1">{ai.advice}</div>
+              <div className="text-xs text-gray-400 mt-3">Confidence: {Math.round((ai.confidence||0)*100)}%</div>
+            </> : <div className="text-xs text-gray-500">AI assistant will explain the scan results here.</div>}
+          </div>
+
+          <div className="mt-4 text-xs text-gray-500"><strong>Note:</strong> AI provides recommendations based on the data returned by the backend. It is not a legal or financial advisor.</div>
+        </aside>
+      </div>}
+
+      {!scan && !error && <div className="mt-6 text-sm text-gray-500">Enter a URL and click "Scan with AI". Turn on mock mode for offline testing.</div>}
+
+    </div>);
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<TrustAdvisor />);
   </script>
 </body>
 </html>
